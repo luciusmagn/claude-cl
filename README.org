@@ -1,0 +1,157 @@
+#+TITLE: Claude API for Common Lisp
+#+AUTHOR: Lukáš Hozda
+#+DATE: 2025
+
+** Introduction
+
+This library provides a Common Lisp interface to Anthropic's Claude AI models. It allows you to easily integrate Claude's capabilities into your Common Lisp applications.
+
+** Installation
+
+*** Using Quicklisp local-projects
+
+1. Clone the repository to your Quicklisp local-projects directory:
+
+#+begin_src bash
+cd ~/quicklisp/local-projects/
+git clone https://github.com/your-username/claude-api.git
+#+end_src
+
+2. Load the library in your Lisp environment:
+
+#+begin_src lisp
+(ql:quickload :claude-api)
+#+end_src
+
+*** Dependencies
+
+The library depends on:
+- dexador (HTTP client)
+- jonathan (JSON parsing)
+- alexandria (utilities)
+- uuid (for UUIDs)
+
+These will be automatically loaded by Quicklisp.
+
+** Usage
+
+*** Basic Example
+
+#+begin_src lisp
+(defpackage #:my-app
+  (:use #:cl #:claude-api))
+
+(in-package #:my-app)
+
+(defun ask-claude (prompt)
+  "Ask Claude a question and print the response."
+  (let* ((message (make-message +role-user+
+                               (list (make-text-content prompt))))
+         (request (make-ai-request :model "claude-3-sonnet-20240229"
+                                  :messages (list message)
+                                  :max-tokens 4096
+                                  :api-key "your-api-key-here")))
+    (let ((response (send-request request)))
+      (if (typep response 'error-response)
+          (format t "Error: ~A~%" (error-message response))
+          (dolist (content (response-content response))
+            (when (string= (content-type content) +content-type-text+)
+              (format t "~A~%" (text content))))))))
+
+;; Usage
+(ask-claude "Explain quantum computing in simple terms.")
+#+end_src
+
+*** Multi-turn Conversation
+
+#+begin_src lisp
+(defun chat-with-claude ()
+  "Have a multi-turn conversation with Claude."
+  (let ((messages '())
+        (api-key "your-api-key-here"))
+
+    ;; Add first user message
+    (push (make-message +role-user+
+                        (list (make-text-content "Hello! Can you explain what makes Common Lisp special?")))
+          messages)
+
+    ;; Send first request
+    (let* ((request (make-ai-request :model "claude-3-sonnet-20240229"
+                                     :messages (reverse messages)
+                                     :max-tokens 4096
+                                     :api-key api-key))
+           (response (send-request request)))
+
+      ;; Process response
+      (unless (typep response 'error-response)
+        ;; Add assistant's response to messages
+        (let ((assistant-message (make-message +role-assistant+
+                                              (response-content response))))
+          (push assistant-message messages)
+
+          ;; Print assistant's response
+          (dolist (content (response-content response))
+            (when (string= (content-type content) +content-type-text+)
+              (format t "Claude: ~A~%~%" (text content)))))
+
+        ;; Add second user message
+        (push (make-message +role-user+
+                            (list (make-text-content "What are some good learning resources for Common Lisp?")))
+              messages)
+
+        ;; Send second request with conversation history
+        (let* ((request (make-ai-request :model "claude-3-sonnet-20240229"
+                                        :messages (reverse messages)
+                                        :max-tokens 4096
+                                        :api-key api-key))
+               (response (send-request request)))
+
+          ;; Print second response
+          (unless (typep response 'error-response)
+            (dolist (content (response-content response))
+              (when (string= (content-type content) +content-type-text+)
+                (format t "Claude: ~A~%" (text content))))))))))
+#+end_src
+
+** API Reference
+
+*** Constants
+- ~+content-type-text+~ - Text content type
+- ~+content-type-image+~ - Image content type
+- ~+content-type-tool-use+~ - Tool use content type
+- ~+content-type-tool-result+~ - Tool result content type
+- ~+role-user+~ - User role
+- ~+role-assistant+~ - Assistant role
+
+*** Content Constructors
+- ~(make-text-content text)~ - Create text content
+- ~(make-image-content media-type data)~ - Create image content (base64 encoded)
+- ~(make-tool-use-content id name input)~ - Create tool use content
+- ~(make-tool-result-content tool-use-id content is-error)~ - Create tool result content
+
+*** Message Constructor
+- ~(make-message role content-list)~ - Create a message with the given role and list of content items
+
+*** Request Constructor
+- ~(make-ai-request &key model messages max-tokens metadata stream system temperature top-k top-p api-key (anthropic-version "2023-06-01") tools tool-choice)~ - Create an API request to Claude
+
+*** Send Request
+- ~(send-request request)~ - Send the request to Claude API and return response
+
+*** Response Classes
+- ~ai-response~ - Successful response from Claude
+- ~error-response~ - Error response
+
+*** Accessor Methods
+- ~text~ - Get text from content
+- ~content-type~ - Get content type
+- ~response-content~ - Get content from response
+- ~error-message~ - Get error message
+- ~response-id~ - Get response ID
+- ~response-model~ - Get model name
+- ~input-tokens~ - Get number of input tokens
+- ~output-tokens~ - Get number of output tokens
+
+** License
+
+This library is licensed under the Fair License.
