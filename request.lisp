@@ -193,7 +193,7 @@
                     ("anthropic-beta"    . "max-tokens-3-5-sonnet-2024-07-15"))))
 
     ;; For debugging
-    (format t "~%Sending JSON: ~A~%" json-request)
+    ;;(format t "~%Sending JSON: ~A~%" json-request)
 
     (handler-case
         (multiple-value-bind (body status headers)
