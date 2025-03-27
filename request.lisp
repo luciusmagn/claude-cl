@@ -147,9 +147,9 @@
 
     ;; Optional fields
     (when (request-metadata request)
-      (write-key "metadata")
-      (with-object
-        (write-key-value "user_id" (user-id (request-metadata request)))))
+      (write-key-value "metadata"
+                       (with-object
+                         (write-key-value "user_id" (user-id (request-metadata request))))))
 
     (when (request-stream request)
       (write-key-value "stream" (request-stream request)))

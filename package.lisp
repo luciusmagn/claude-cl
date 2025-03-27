@@ -13,6 +13,7 @@
    ;; Classes
    #:content
    #:message
+   #:metadata
    #:ai-request
    #:ai-response
    #:error-response

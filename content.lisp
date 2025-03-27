@@ -70,5 +70,5 @@
    (name        :initarg :name        :accessor choice-name :initform nil)))
 
 ;; Metadata class
-(defclass metadata ()
+(defclass metadata  ()
   ((user-id :initarg :user-id :accessor user-id)))
