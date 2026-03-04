@@ -49,6 +49,14 @@
                  :data         content
                  :is-error     is-error))
 
+(defun make-generic-content (content-type content-data)
+  "Create a generic content object for provider-specific blocks."
+  (make-instance 'content
+                 :content-type (or content-type "unknown")
+                 :text         (and (listp content-data)
+                                    (cdr (assoc "text" content-data :test #'string=)))
+                 :data         content-data))
+
 ;; Message class
 (defclass message ()
   ((role    :initarg :role    :accessor message-role    :type string)

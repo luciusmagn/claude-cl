@@ -25,7 +25,7 @@
 ;; Parser functions
 (defun parse-content (content-data)
   "Parse one content block.
-Returns NIL for unsupported block types so callers may filter them out."
+Keeps provider-specific block types as generic content objects."
   (let ((content-type (cdr (assoc "type" content-data :test #'string=))))
     (cond
       ((string= content-type "text")
@@ -46,9 +46,9 @@ Returns NIL for unsupported block types so callers may filter them out."
         (cdr (assoc "content" content-data :test #'string=))
         (cdr (assoc "is_error" content-data :test #'string=))))
       (t
-       ;; OpenRouter-compatible providers may emit additional blocks
-       ;; such as thinking/redacted_thinking. Ignore them by default.
-       nil))))
+       ;; Preserve provider-specific blocks (for example thinking types)
+       ;; so consumers can opt in or out at the application layer.
+       (make-generic-content content-type content-data)))))
 
 (defun parse-usage (usage-data)
   (make-instance 'usage
@@ -64,8 +64,7 @@ Returns NIL for unsupported block types so callers may filter them out."
                          :error-type    (cdr (assoc "type" error-data :test #'string=))
                          :error-message (cdr (assoc "message" error-data :test #'string=))))
         (let* ((raw-content (cdr (assoc "content" json-data :test #'string=)))
-               (contents    (remove nil
-                                    (mapcar #'parse-content raw-content))))
+               (contents    (mapcar #'parse-content raw-content)))
           (make-instance 'ai-response
                          :id            (cdr (assoc "id" json-data :test #'string=))
                          :response-type response-type
