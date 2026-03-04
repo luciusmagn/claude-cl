@@ -24,6 +24,8 @@
 
 ;; Parser functions
 (defun parse-content (content-data)
+  "Parse one content block.
+Returns NIL for unsupported block types so callers may filter them out."
   (let ((content-type (cdr (assoc "type" content-data :test #'string=))))
     (cond
       ((string= content-type "text")
@@ -42,7 +44,11 @@
        (make-tool-result-content
         (cdr (assoc "tool_use_id" content-data :test #'string=))
         (cdr (assoc "content" content-data :test #'string=))
-        (cdr (assoc "is_error" content-data :test #'string=)))))))
+        (cdr (assoc "is_error" content-data :test #'string=))))
+      (t
+       ;; OpenRouter-compatible providers may emit additional blocks
+       ;; such as thinking/redacted_thinking. Ignore them by default.
+       nil))))
 
 (defun parse-usage (usage-data)
   (make-instance 'usage
@@ -57,12 +63,15 @@
                          :response-type response-type
                          :error-type    (cdr (assoc "type" error-data :test #'string=))
                          :error-message (cdr (assoc "message" error-data :test #'string=))))
-        (make-instance 'ai-response
-                       :id            (cdr (assoc "id" json-data :test #'string=))
-                       :response-type response-type
-                       :role          (cdr (assoc "role" json-data :test #'string=))
-                       :content       (mapcar #'parse-content (cdr (assoc "content" json-data :test #'string=)))
-                       :model         (cdr (assoc "model" json-data :test #'string=))
-                       :stop-reason   (cdr (assoc "stop_reason" json-data :test #'string=))
-                       :stop-sequence (cdr (assoc "stop_sequence" json-data :test #'string=))
-                       :usage         (parse-usage (cdr (assoc "usage" json-data :test #'string=)))))))
+        (let* ((raw-content (cdr (assoc "content" json-data :test #'string=)))
+               (contents    (remove nil
+                                    (mapcar #'parse-content raw-content))))
+          (make-instance 'ai-response
+                         :id            (cdr (assoc "id" json-data :test #'string=))
+                         :response-type response-type
+                         :role          (cdr (assoc "role" json-data :test #'string=))
+                         :content       contents
+                         :model         (cdr (assoc "model" json-data :test #'string=))
+                         :stop-reason   (cdr (assoc "stop_reason" json-data :test #'string=))
+                         :stop-sequence (cdr (assoc "stop_sequence" json-data :test #'string=))
+                         :usage         (parse-usage (cdr (assoc "usage" json-data :test #'string=))))))))
