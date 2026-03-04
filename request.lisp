@@ -12,14 +12,29 @@
    (top-k             :initarg :top-k             :accessor request-top-k             :initform nil)
    (top-p             :initarg :top-p             :accessor request-top-p             :initform nil)
    (api-key           :initarg :api-key           :accessor request-api-key           :type string)
+   (api-url           :initarg :api-url           :accessor request-api-url           :initform "https://api.anthropic.com/v1/messages" :type string)
+   (auth-header-name  :initarg :auth-header-name  :accessor request-auth-header-name  :initform "x-api-key" :type string)
+   (auth-token-prefix :initarg :auth-token-prefix :accessor request-auth-token-prefix :initform nil :type (or null string))
+   (extra-headers     :initarg :extra-headers     :accessor request-extra-headers     :initform nil :type list)
+   (include-anthropic-version-header :initarg :include-anthropic-version-header
+                                     :accessor request-include-anthropic-version-header
+                                     :initform t
+                                     :type boolean)
    (anthropic-version :initarg :anthropic-version :accessor request-anthropic-version :initform "2023-06-01" :type string)
+   (anthropic-beta    :initarg :anthropic-beta    :accessor request-anthropic-beta    :initform "max-tokens-3-5-sonnet-2024-07-15" :type (or null string))
    (tools             :initarg :tools             :accessor request-tools             :initform nil)
    (tool-choice       :initarg :tool-choice       :accessor request-tool-choice       :initform nil)))
 
 ;; Request constructor with keyword arguments
 (defun make-ai-request (&key model messages max-tokens metadata stream system
                           temperature top-k top-p api-key (anthropic-version "2023-06-01")
-                          tools tool-choice)
+                          tools tool-choice
+                          (api-url "https://api.anthropic.com/v1/messages")
+                          (auth-header-name "x-api-key")
+                          auth-token-prefix
+                          (extra-headers nil)
+                          (include-anthropic-version-header t)
+                          (anthropic-beta "max-tokens-3-5-sonnet-2024-07-15"))
   (make-instance 'ai-request
                  :model             model
                  :messages          messages
@@ -31,7 +46,13 @@
                  :top-k             top-k
                  :top-p             top-p
                  :api-key           api-key
+                 :api-url           api-url
+                 :auth-header-name  auth-header-name
+                 :auth-token-prefix auth-token-prefix
+                 :extra-headers     extra-headers
+                 :include-anthropic-version-header include-anthropic-version-header
                  :anthropic-version anthropic-version
+                 :anthropic-beta    anthropic-beta
                  :tools             tools
                  :tool-choice       tool-choice))
 
@@ -183,21 +204,50 @@
                          (when (choice-name (request-tool-choice request))
                            (write-key-value "name" (choice-name (request-tool-choice request)))))))))
 
+(defun merge-http-headers (&rest header-lists)
+  "Merge HTTP headers left-to-right, with later values overriding earlier ones.
+Header names are compared case-insensitively."
+  (let ((result '()))
+    (dolist (headers header-lists)
+      (dolist (header headers)
+        (let* ((name (car header))
+               (value (cdr header))
+               (existing (find name result :key #'car :test #'string-equal)))
+          (if existing
+              (setf (cdr existing) value)
+              (push (cons name value) result)))))
+    (nreverse result)))
+
+(defun default-http-headers (request)
+  "Build default HTTP headers for REQUEST."
+  (let* ((auth-token (format nil "~@[~A~]~A"
+                             (request-auth-token-prefix request)
+                             (request-api-key request)))
+         (headers (list (cons (request-auth-header-name request) auth-token)
+                        (cons "content-type" "application/json"))))
+    (when (and (request-include-anthropic-version-header request)
+               (request-anthropic-version request))
+      (setf headers (append headers
+                            (list (cons "anthropic-version"
+                                        (request-anthropic-version request))))))
+    (when (request-anthropic-beta request)
+      (setf headers (append headers
+                            (list (cons "anthropic-beta"
+                                        (request-anthropic-beta request))))))
+    headers))
+
 (defun send-request (request)
   (let* ((json-request (jonathan:to-json request))
-         (api-key (request-api-key request))
-         (anthropic-version (request-anthropic-version request))
-         (headers `(("x-api-key"         . ,api-key)
-                    ("content-type"      . "application/json")
-                    ("anthropic-version" . ,anthropic-version)
-                    ("anthropic-beta"    . "max-tokens-3-5-sonnet-2024-07-15"))))
+         (headers (merge-http-headers (default-http-headers request)
+                                      (request-extra-headers request)))
+         (api-url (request-api-url request)))
 
     ;; For debugging
     ;;(format t "~%Sending JSON: ~A~%" json-request)
 
     (handler-case
         (multiple-value-bind (body status headers)
-            (dexador:post "https://api.anthropic.com/v1/messages"
+            (dexador:post api-url
                           :headers headers
                           :content json-request)
           (declare (ignore headers))
