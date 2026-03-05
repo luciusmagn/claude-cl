@@ -11,6 +11,7 @@
    (temperature       :initarg :temperature       :accessor request-temperature       :initform nil)
    (top-k             :initarg :top-k             :accessor request-top-k             :initform nil)
    (top-p             :initarg :top-p             :accessor request-top-p             :initform nil)
+   (provider          :initarg :provider          :accessor request-provider          :initform nil :type (or null list))
    (api-key           :initarg :api-key           :accessor request-api-key           :type string)
    (api-url           :initarg :api-url           :accessor request-api-url           :initform "https://api.anthropic.com/v1/messages" :type string)
    (auth-header-name  :initarg :auth-header-name  :accessor request-auth-header-name  :initform "x-api-key" :type string)
@@ -27,7 +28,7 @@
 
 ;; Request constructor with keyword arguments
 (defun make-ai-request (&key model messages max-tokens metadata stream system
-                          temperature top-k top-p api-key (anthropic-version "2023-06-01")
+                          temperature top-k top-p provider api-key (anthropic-version "2023-06-01")
                           tools tool-choice
                           (api-url "https://api.anthropic.com/v1/messages")
                           (auth-header-name "x-api-key")
@@ -45,6 +46,7 @@
                  :temperature       temperature
                  :top-k             top-k
                  :top-p             top-p
+                 :provider          provider
                  :api-key           api-key
                  :api-url           api-url
                  :auth-header-name  auth-header-name
@@ -94,6 +96,21 @@
       (setf (getf result :name) (choice-name tool-choice)))
     result))
 
+(defun plist-key-present-p (plist key)
+  "Return T when KEY is present in PLIST."
+  (loop for plist-key in plist by #'cddr
+        thereis (eq plist-key key)))
+
+(defun provider-option (provider primary-key &optional alternate-key)
+  "Read provider option from PROVIDER plist, supporting alternate key form."
+  (cond
+    ((plist-key-present-p provider primary-key)
+     (values (getf provider primary-key) t))
+    ((and alternate-key (plist-key-present-p provider alternate-key))
+     (values (getf provider alternate-key) t))
+    (t
+     (values nil nil))))
+
 (defun request-to-plist (request)
   (let ((result (list :model      (request-model request)
                       :messages   (mapcar #'message-to-plist (request-messages request))
@@ -118,6 +135,9 @@
 
     (when (request-top-p request)
       (setf (getf result :top_p) (request-top-p request)))
+
+    (when (request-provider request)
+      (setf (getf result :provider) (request-provider request)))
 
     (when (request-tools request)
       (setf (getf result :tools) (mapcar #'tool-to-plist (request-tools request))))
@@ -186,6 +206,28 @@
 
     (when (request-top-p request)
       (write-key-value "top_p" (request-top-p request)))
+
+    (when (request-provider request)
+      (let ((provider (request-provider request)))
+        (write-key "provider")
+        (with-object
+          (multiple-value-bind (order present-order)
+              (provider-option provider :order)
+            (when present-order
+              (write-key-value "order"
+                               (with-array
+                                 (dolist (name order)
+                                   (write-item name))))))
+          (multiple-value-bind (allow-fallbacks present-allow-fallbacks)
+              (provider-option provider :allow-fallbacks :allow_fallbacks)
+            (when present-allow-fallbacks
+              (write-key-value "allow_fallbacks"
+                               (if allow-fallbacks t :false))))
+          (multiple-value-bind (require-parameters present-require-parameters)
+              (provider-option provider :require-parameters :require_parameters)
+            (when present-require-parameters
+              (write-key-value "require_parameters"
+                               (if require-parameters t :false)))))))
 
     (when (request-tools request)
       (write-key-value "tools"
