@@ -4,7 +4,7 @@
 
 ** Introduction
 
-This library provides a Common Lisp interface to Anthropic's Claude AI models. It allows you to easily integrate Claude's capabilities into your Common Lisp applications.
+This library provides a Common Lisp interface to Anthropic's Claude API and compatible Messages API providers. It allows you to integrate Claude-compatible capabilities into your Common Lisp applications.
 
 ** Installation
 
@@ -113,6 +113,27 @@ These will be automatically loaded by Quicklisp.
                 (format t "Claude: ~A~%" (text content))))))))))
 #+end_src
 
+*** OpenRouter (Anthropic-compatible endpoint)
+
+#+begin_src lisp
+(defun ask-openrouter (prompt)
+  (let* ((message (make-message +role-user+
+                                (list (make-text-content prompt))))
+         (request (make-ai-request
+                   :model "moonshotai/kimi-k2.5"
+                   :messages (list message)
+                   :max-tokens 4096
+                   :api-key "your-openrouter-api-key"
+                   :api-url "https://openrouter.ai/api/v1/messages"
+                   :auth-header-name "Authorization"
+                   :auth-token-prefix "Bearer "
+                   :include-anthropic-version-header nil
+                   :anthropic-beta nil
+                   :extra-headers '(("HTTP-Referer" . "https://your-app.example")
+                                    ("X-Title" . "Your App")))))
+    (send-request request)))
+#+end_src
+
 ** API Reference
 
 *** Constants
@@ -133,7 +154,7 @@ These will be automatically loaded by Quicklisp.
 - ~(make-message role content-list)~ - Create a message with the given role and list of content items
 
 *** Request Constructor
-- ~(make-ai-request &key model messages max-tokens metadata stream system temperature top-k top-p api-key (anthropic-version "2023-06-01") tools tool-choice)~ - Create an API request to Claude
+- ~(make-ai-request &key model messages max-tokens metadata stream system temperature top-k top-p api-key (anthropic-version "2023-06-01") tools tool-choice (api-url "https://api.anthropic.com/v1/messages") (auth-header-name "x-api-key") auth-token-prefix (extra-headers nil) (include-anthropic-version-header t) (anthropic-beta "max-tokens-3-5-sonnet-2024-07-15"))~ - Create an API request to Claude or a compatible endpoint
 
 *** Send Request
 - ~(send-request request)~ - Send the request to Claude API and return response
